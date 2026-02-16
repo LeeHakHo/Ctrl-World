@@ -157,9 +157,9 @@ if __name__ == "__main__":
 
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument('--droid_hf_path', type=str, default='/cephfs/shared/droid_hf/droid_1.0.1')
-    parser.add_argument('--droid_output_path', type=str, default='dataset_example/droid_subset')
-    parser.add_argument('--svd_path', type=str, default='/cephfs/shared/llm/stable-video-diffusion-img2vid')
+    parser.add_argument('--droid_hf_path', type=str, default='/scr/shared/world_model/DROID-1.0.1')
+    parser.add_argument('--droid_output_path', type=str, default='dataset_example/outputs/extract_latent/')
+    parser.add_argument('--svd_path', type=str, default='/scr/hyeonhoo/checkpoints/stable-video-diffusion-img2vid')
     # debug
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
