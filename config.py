@@ -16,20 +16,20 @@ class wm_args:
     # dataset parameters
     # raw data
     dataset_root_path = "dataset_example"
-    dataset_names = 'droid_subset'
+    dataset_names = 'droid'
     # meta info
     dataset_meta_info_path = 'dataset_meta_info' #'/cephfs/cjyyj/code/video_evaluation/exp_cfg'#'dataset_meta_info'
     dataset_cfgs = dataset_names
     prob=[1.0]
     annotation_name='annotation' #'annotation_all_skip1'
     num_workers=4
-    down_sample=1 # DROID: downsample 15hz to 5hz (state/video ratio). LIBERO with frame_skip=4 should use down_sample=1
+    down_sample=3 # DROID: downsample 15hz to 5hz (state/video ratio). LIBERO with frame_skip=4 should use down_sample=1
     skip_step = 1
     
 
     # logs parameters
     debug = False
-    tag = 'doird_subset'
+    tag = 'doird'
     output_dir = f"model_ckpt/{tag}"
     wandb_run_name = tag
     wandb_project_name = "droid_example"
@@ -39,7 +39,7 @@ class wm_args:
     learning_rate= 1e-5 # 5e-6
     gradient_accumulation_steps = 1
     mixed_precision = 'fp16'
-    train_batch_size = 2
+    train_batch_size = 1
     shuffle = True
     num_train_epochs = 10
     max_train_steps = 10000

@@ -41,6 +41,7 @@ class Dataset_mix(Dataset):
         self.samples_len = []
         self.norm_all = []
 
+        self.extra_latent = getattr(args, "extra_feature", None)
 
         dataset_root_path = args.dataset_root_path
         dataset_names = args.dataset_names.split('+')
@@ -70,6 +71,22 @@ class Dataset_mix(Dataset):
 
     def __len__(self):
         return self.max_id
+
+    def _load_extra_latent(self, base_dir, episode_id, frame_ids):
+        ep_dir = os.path.join(base_dir, self.extra_latent, self.mode, str(episode_id))
+
+        cams = []
+        for cam_id in [0, 1, 2]:
+            p = os.path.join(ep_dir, f"{cam_id}.pt")
+            x = torch.load(p, map_location="cpu")   #(T_total, ...)
+            cams.append(x)
+        T_total = min(c.shape[0] for c in cams)
+        frame_ids = [min(int(fid), T_total - 1) for fid in frame_ids]
+
+
+        cams = [c[frame_ids] for c in cams]         # cam: (T, ...)
+        extra = torch.stack(cams, dim=1)            # (T, 3, ...)
+        return extra
 
     def _load_latent_video(self, video_path, frame_ids):
         with open(video_path,'rb') as file:
@@ -192,6 +209,14 @@ class Dataset_mix(Dataset):
         action = np.concatenate((cartesian_pose, gripper_pose), axis=-1)
         action = self.normalize_bound(action, state_p01, state_p99)
         data['action'] = torch.tensor(action).float()
+
+        # optional extra latent (e.g., optical_flow)
+        if self.extra_latent is not None:
+            data["extra_feature"] = self._load_extra_latent(
+                base_dir=dataset_dir,
+                episode_id=sample["episode_id"],
+                frame_ids=rgb_id,
+            ).float()
 
         return data
         

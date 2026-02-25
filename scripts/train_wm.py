@@ -66,6 +66,10 @@ def main(args):
 
     # train and val datasets
     from dataset.dataset_droid_exp33 import Dataset_mix
+    print("args.dataset_root_path =", args.dataset_root_path)
+    print("args.dataset_names     =", args.dataset_names)
+    print("args.dataset_cfgs      =", args.dataset_cfgs)
+    print("args.dataset_meta_info_path =", args.dataset_meta_info_path)
     train_dataset = Dataset_mix(args,mode='train')
     val_dataset = Dataset_mix(args,mode='val')
     train_dataloader = torch.utils.data.DataLoader(
@@ -244,15 +248,18 @@ if __name__ == "__main__":
     # reset parameters with command line
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument('--svd_model_path', type=str, default=None)
-    parser.add_argument('--clip_model_path', type=str, default=None)
+    parser.add_argument('--svd_model_path', type=str, default='/scr/hyeonhoo/checkpoints/stable-video-diffusion-img2vid')
+    parser.add_argument('--clip_model_path', type=str, default='/scr/hyeonhoo/checkpoints/clip-vit-base-patch32')
     parser.add_argument('--ckpt_path', type=str, default=None)
-    parser.add_argument('--dataset_root_path', type=str, default=None)
-    parser.add_argument('--dataset_meta_info_path', type=str, default=None)
+    #parser.add_argument('--ckpt_path', type=str, default='/scr/hyeonhoo/checkpoints/Ctrl-World/checkpoint-10000.pt')
+    parser.add_argument('--dataset_root_path', type=str, default='/scr/hyeonhoo/outputs/extract_latent/')
+    parser.add_argument('--dataset_meta_info_path', type=str, default='dataset_meta_info')
     # dataset_names
-    parser.add_argument('--dataset_names', type=str, default=None)
+    parser.add_argument('--dataset_names', type=str, default='droid')
     parser.add_argument('--action_dim', type=int, default=None)
     parser.add_argument('--down_sample', type=int, default=None)
+    # extra-feature
+    parser.add_argument('--extra_feature', type=str, default=None)
     args_new = parser.parse_args()
     args = wm_args()
 

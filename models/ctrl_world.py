@@ -141,7 +141,30 @@ class CrtlWorld(nn.Module):
         # initialize an action projector
         self.action_encoder = Action_encoder2(action_dim=args.action_dim, action_num=int(args.num_history+args.num_frames), hidden_size=1024, text_cond=args.text_cond)
 
-    
+        self.extra_feature = args.extra_feature
+        if self.extra_feature is not None:
+            # from .extra_encoder.oc_obs_encoder import OCObsEncoder
+            from .extra_encoder.flow_encoder import FlowCNNEncoder
+            # custom_shape_meta = {
+            #     'control_obs': {
+            #         'camera0_rgb_narrow_objs': {
+            #             'shape': [192, 320], 
+            #             'num_objs': 6, #3 views * 2 channel
+            #             'type': 'rgb',
+            #             'positional_embedding': 'sine',
+            #             'local_feature': 'graycnn'
+            #         }
+            #     }
+            # }
+
+            # self.extra_latent_encoder = OCObsEncoder(
+            #     shape_meta=custom_shape_meta,
+            #     n_emb=1024, 
+            #     feature_aggregation=None # or transformer etc
+            # )
+
+
+            self.flow_encoder = FlowCNNEncoder(embed_dim=1024) # 혹은 FlowViTEncoder
 
     def forward(self, batch):
         latents = batch['latent'] # (B, 16, 4, 32, 32)
@@ -171,6 +194,41 @@ class CrtlWorld(nn.Module):
         action = batch['action'] # (B, f, 7)
         action = action.to(device)
         action_hidden = self.action_encoder(action, texts, self.tokenizer, self.text_encoder, frame_level_cond=self.args.frame_level_cond) # (B, f, 1024)
+
+        if self.extra_feature is not None:
+            # extra_feat = batch['extra_feature'].to(device) 
+            # print(extra_feat.shape)
+            
+            # B, T, V, C, H, W = extra_feat.shape
+
+            # extra_feat_reshaped = einops.rearrange(extra_feat, 'b t v c h w -> (b t) (v c) h w')
+            # extra_obs = {
+            #     'camera0_rgb_narrow_objs': extra_feat_reshaped
+            # }
+            # extra_latents = self.extra_latent_encoder(extra_obs) 
+            # extra_latents = einops.rearrange(extra_latents, '(b t) s d -> b (t s) d', b=B, t=T)
+            # action_hidden = torch.cat([action_hidden, extra_latents], dim=1)
+
+            extra_feat = batch['extra_feature'].to(device) # (B, T, V, 2, H, W)
+            B, T, V, C, H, W = extra_feat.shape
+            
+
+            # (B, T, V, 2, H, W) -> (B*T*V, 2, H, W)
+            x = einops.rearrange(extra_feat, 'b t v c h w -> (b t v) c h w')
+            
+
+            flow_features = self.flow_encoder(x) # (B*T*V, 1024)
+            
+            # (B*T*V, 1024) -> (B, T*V, 1024)
+            flow_features = einops.rearrange(flow_features, '(b t v) d -> b (t v) d', b=B, t=T, v=V)
+            
+
+            #OOM
+            #flow_features = flow_features.mean(dim=2) # View 차원 평균 (B, T, 1024)
+            #flow_features = flow_features.unsqueeze(2) # (B, T, 1, 1024)
+            
+            action_hidden = torch.cat([action_hidden, flow_features], dim=1)
+
 
         # for classifier-free guidance, with 5% probability, set action_hidden to 0
         uncond_hidden_states = torch.zeros_like(action_hidden)
