@@ -65,10 +65,10 @@ class EncodeLatentDatasetLibero(Dataset):
         self.vae = AutoencoderKLTemporalDecoder.from_pretrained(svd_path, subfolder="vae").to(device)
 
         # Find dataset snapshot path
-        snapshot_dir = os.path.join(libero_hf_path, 'snapshots')
-        snapshot_id = os.listdir(snapshot_dir)[0]
-        self.data_root = os.path.join(snapshot_dir, snapshot_id)
-        
+        # snapshot_dir = os.path.join(libero_hf_path, 'snapshots')
+        # snapshot_id = os.listdir(snapshot_dir)[0]
+        # self.data_root = os.path.join(snapshot_dir, snapshot_id)
+        self.data_root = libero_hf_path
         print(f"Data root directory: {self.data_root}")
         
         # Load all episode data files
@@ -79,32 +79,72 @@ class EncodeLatentDatasetLibero(Dataset):
             if f.endswith('.parquet')
         ])
         
-        # Load task information (index is the task description)
-        tasks_df = pd.read_parquet(os.path.join(self.data_root, 'meta/tasks.parquet'))
-        self.num_tasks = len(tasks_df)
-        # Create task_index → task description mapping (as fallback)
-        self.task_descriptions = {idx: task_desc for idx, task_desc in enumerate(tasks_df.index)}
-        
-        # Load episodes metadata (contains task description for each episode)
+        # ----------------------------
+        # Load task information
+        # ----------------------------
+        self.task_descriptions = {}
+        self.num_tasks = 0
+
+        tasks_jsonl = os.path.join(self.data_root, "meta", "tasks.jsonl")
+        if os.path.exists(tasks_jsonl):
+            # tasks.jsonl: each line is a JSON object.
+            # We'll build task_index -> task description mapping.
+            with open(tasks_jsonl, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+
+                    # Try common fields
+                    # Some datasets store: {"task_index": 0, "task": "..."} or {"id":0,"text":"..."}
+                    task_idx = obj.get("task_index", obj.get("id", obj.get("index", None)))
+                    task_text = obj.get("task", obj.get("text", obj.get("description", None)))
+
+                    if task_idx is not None and task_text is not None:
+                        self.task_descriptions[int(task_idx)] = str(task_text)
+
+            self.num_tasks = len(self.task_descriptions)
+            print(f"Loaded {self.num_tasks} tasks from {tasks_jsonl}")
+        else:
+            print(f"⚠️ tasks.jsonl not found: {tasks_jsonl}")
+
+        # ----------------------------
+        # Load episode -> task description mapping
+        # ----------------------------
         self.episode_tasks = {}
-        episodes_meta_dir = os.path.join(self.data_root, 'meta/episodes/chunk-000')
-        if os.path.exists(episodes_meta_dir):
-            episodes_meta_files = sorted([
-                os.path.join(episodes_meta_dir, f) 
-                for f in os.listdir(episodes_meta_dir) 
-                if f.endswith('.parquet')
-            ])
-            for episodes_meta_file in episodes_meta_files:
-                episodes_meta_df = pd.read_parquet(episodes_meta_file)
-                for _, row in episodes_meta_df.iterrows():
-                    ep_idx = row['episode_index']
-                    tasks = row['tasks']
-                    # tasks is a list, take the first task description
+
+        episodes_jsonl = os.path.join(self.data_root, "meta", "episodes.jsonl")
+        if os.path.exists(episodes_jsonl):
+            with open(episodes_jsonl, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+
+                    # Try common fields
+                    ep_idx = obj.get("episode_index", obj.get("episode_id", obj.get("id", None)))
+
+                    # tasks could be list of strings or list of dicts
+                    tasks = obj.get("tasks", None)
+                    task_text = None
                     if isinstance(tasks, list) and len(tasks) > 0:
-                        self.episode_tasks[ep_idx] = tasks[0]
-        
-        print(f"Found {len(self.data_files)} data files, {self.num_tasks} tasks")
-        print(f"Loaded task descriptions for {len(self.episode_tasks)} episodes")
+                        if isinstance(tasks[0], str):
+                            task_text = tasks[0]
+                        elif isinstance(tasks[0], dict):
+                            task_text = tasks[0].get("task", tasks[0].get("text", tasks[0].get("description", None)))
+
+                    # sometimes it's stored directly
+                    if task_text is None:
+                        task_text = obj.get("task", obj.get("text", obj.get("description", None)))
+
+                    if ep_idx is not None and task_text is not None:
+                        self.episode_tasks[int(ep_idx)] = str(task_text)
+
+            print(f"Loaded task descriptions for {len(self.episode_tasks)} episodes from {episodes_jsonl}")
+        else:
+            print(f"⚠️ episodes.jsonl not found: {episodes_jsonl}")
         
         # Collect all episodes
         self.episodes = []
@@ -345,15 +385,15 @@ if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument('--libero_hf_path', type=str, 
-                       default='/home/yusenluo/.cache/huggingface/hub/datasets--lerobot--libero_10_image',
+                       default='/scr2/shared/world_model/libero/',
                        help='HuggingFace cache path for LIBERO dataset')
-    parser.add_argument('--output_path', type=str, default='dataset_example/libero',
+    parser.add_argument('--output_path', type=str, default='/scr/hyeonhoo/outputs/libero',
                        help='Save path for processed data')
-    parser.add_argument('--svd_path', type=str, default='models/svd',
+    parser.add_argument('--svd_path', type=str, default='/scr/hyeonhoo/checkpoints/stable-video-diffusion-img2vid',
                        help='SVD model path')
     parser.add_argument('--video_size', type=str, default='192x320',
                        help='Video resolution (format: HxW, e.g., 192x320 or 256x448, set to "none" for no resize)')
-    parser.add_argument('--frame_skip', type=int, default=1,
+    parser.add_argument('--frame_skip', type=int, default=4,
                        help='Frame downsampling interval (1=no downsampling, 2=take 1 frame every 2 frames, 3=take 1 frame every 3 frames)')
     parser.add_argument('--flip_horizontal', action='store_true',
                        help='Flip images horizontally (correct left-right direction, enable if task description left-right is opposite to video)')
